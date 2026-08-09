@@ -1,7 +1,7 @@
 #![no_std]
 #![allow(deprecated)]
 use soroban_sdk::{contract, contractimpl, contracttype, vec, Address, BytesN, Env, Symbol, Vec};
-use nbbs_shared::{OracleError, ReportStatus};
+use nbbs_shared::{BiodiversityMetrics, OracleError, ReportStatus};
 
 pub const CHALLENGE_WINDOW_SECONDS: u64 = 259200;
 pub const SLASH_PENALTY_PPM: i128 = 100_000;
@@ -42,6 +42,7 @@ pub struct Report {
     pub period_start: u64,
     pub period_end: u64,
     pub carbon_sequestered: i128,
+    pub biodiversity: BiodiversityMetrics,
     pub methodology: Symbol,
     pub ipfs_evidence_hash: BytesN<32>,
     pub status: ReportStatus,
@@ -199,6 +200,7 @@ impl OracleConsumer {
         period_start: u64,
         period_end: u64,
         carbon_sequestered: i128,
+        biodiversity: BiodiversityMetrics,
         methodology: Symbol,
         ipfs_evidence_hash: BytesN<32>,
         nonce: u64,
@@ -224,6 +226,11 @@ impl OracleConsumer {
         if period_end <= period_start || carbon_sequestered < 0 {
             return Err(OracleError::InvalidSignature);
         }
+        if let BiodiversityMetrics::Present((habitat, species, units)) = &biodiversity {
+            if habitat < &0 || species < &0 || units < &0 {
+                return Err(OracleError::InvalidSignature);
+            }
+        }
 
         let count: u64 = env
             .storage()
@@ -243,6 +250,7 @@ impl OracleConsumer {
             period_start,
             period_end,
             carbon_sequestered,
+            biodiversity,
             methodology,
             ipfs_evidence_hash,
             status: ReportStatus::Pending,
@@ -726,6 +734,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -754,6 +763,68 @@ mod test {
     }
 
     #[test]
+    fn test_submit_report_with_biodiversity_metrics() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let provider = Address::generate(&env);
+        let project_id = create_project_id(&env, 1);
+
+        let contract_id = env.register(OracleConsumer, (admin.clone(),));
+        let client = OracleConsumerClient::new(&env, &contract_id);
+
+        client.register_provider(&admin, &provider, &Symbol::new(&env, "uk_bng"), &0);
+
+        let metrics = nbbs_shared::BiodiversityMetrics::Present((500, 125, 1_000));
+        let report_id = client.submit_report(
+            &provider,
+            &project_id,
+            &1000u64,
+            &2000u64,
+            &0i128,
+            &metrics,
+            &Symbol::new(&env, "uk_bng"),
+            &make_ipfs_hash(&env, 1),
+            &0,
+        );
+        assert_eq!(report_id, 1);
+
+        let stored = client.get_report(&report_id);
+        assert_eq!(stored.biodiversity, metrics);
+        assert_eq!(stored.carbon_sequestered, 0);
+    }
+
+    #[test]
+    fn test_submit_report_rejects_negative_biodiversity_metrics() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let provider = Address::generate(&env);
+        let project_id = create_project_id(&env, 1);
+
+        let contract_id = env.register(OracleConsumer, (admin.clone(),));
+        let client = OracleConsumerClient::new(&env, &contract_id);
+
+        client.register_provider(&admin, &provider, &Symbol::new(&env, "uk_bng"), &0);
+
+        let metrics = nbbs_shared::BiodiversityMetrics::Present((-1, 0, 0));
+        let result = client.try_submit_report(
+            &provider,
+            &project_id,
+            &1000u64,
+            &2000u64,
+            &0i128,
+            &metrics,
+            &Symbol::new(&env, "uk_bng"),
+            &make_ipfs_hash(&env, 1),
+            &0,
+        );
+        assert_eq!(result, Err(Ok(OracleError::InvalidSignature)));
+    }
+
+    #[test]
     fn test_submit_challenge_and_resolve() {
         let env = Env::default();
         env.mock_all_auths();
@@ -774,6 +845,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -832,6 +904,7 @@ mod test {
             &1_000_100u64,
             &1_000_200u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -870,6 +943,7 @@ mod test {
             &1_000_100u64,
             &1_000_200u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -906,6 +980,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -955,6 +1030,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -987,6 +1063,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1024,6 +1101,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1058,6 +1136,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1090,6 +1169,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1118,6 +1198,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1162,6 +1243,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1211,6 +1293,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1353,6 +1436,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &1,
@@ -1402,6 +1486,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &1,
@@ -1448,6 +1533,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &1,
@@ -1488,6 +1574,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(env, "verra_vcs"),
             &make_ipfs_hash(env, 1),
             &provider_nonce,
@@ -1520,6 +1607,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1569,6 +1657,7 @@ mod test {
             &1000u64,
             &2000u64,
             &100_000i128,
+            &BiodiversityMetrics::Absent,
             &Symbol::new(&env, "verra_vcs"),
             &make_ipfs_hash(&env, 1),
             &0,
@@ -1753,6 +1842,7 @@ mod test {
                     &1000u64,
                     &2000u64,
                     &100_000i128,
+                    &BiodiversityMetrics::Absent,
                     &Symbol::new(&env, "verra_vcs"),
                     &make_ipfs_hash(&env, 1),
                     &1,
