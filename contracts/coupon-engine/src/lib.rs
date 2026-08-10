@@ -181,7 +181,7 @@ impl CouponEngine {
 
         let carbon_total = report.carbon_sequestered / CREDIT_DIVISOR;
         let (carbon_total, biodiversity_total) = match credit_type {
-            CreditType::Carbon => (carbon_total, 0),
+            CreditType::Carbon | CreditType::BlueCarbon => (carbon_total, 0),
             CreditType::Biodiversity => match report.biodiversity {
                 BiodiversityMetrics::Absent => return Err(BondError::InvalidReport),
                 ref metrics => (0, compute_biodiversity_credits(metrics)),
@@ -229,7 +229,7 @@ impl CouponEngine {
 
             if balance > 0 {
                 match credit_type {
-                    CreditType::Carbon => {
+                    CreditType::Carbon | CreditType::BlueCarbon => {
                         let holder_credits = credits_per_token * balance / FIXED_POINT;
                         if holder_credits > 0 {
                             total_holder_credits = total_holder_credits
@@ -401,7 +401,7 @@ impl CouponEngine {
                 .instance()
                 .get(&DataKey::BondCreditType(bond_id));
             match credit_type {
-                Some(CreditType::Carbon) => {
+                Some(CreditType::Carbon) | Some(CreditType::BlueCarbon) => {
                     clear_accrued(&env, bond_id, &caller, CreditType::Carbon);
                 }
                 Some(CreditType::Biodiversity) => {

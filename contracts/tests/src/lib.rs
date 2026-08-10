@@ -10,7 +10,8 @@ mod integration {
     use nbbs_dex_router::{DEXRouter, DEXRouterClient};
     use nbbs_credit_retirement::{CreditRetirement, CreditRetirementClient};
     use nbbs_shared::{
-        BondConfig, BondError, CreditType, OracleError, ProjectStatus, RegistryError, ReportStatus,
+        BiodiversityMetrics, BondConfig, BondError, CreditType, OracleError, ProjectStatus,
+        RegistryError, ReportStatus,
     };
 
     fn make_project_id(env: &Env, value: u8) -> BytesN<32> {
@@ -346,6 +347,7 @@ mod integration {
                 &1000u64,
                 &2000u64,
                 &86_000_000i128,
+                &BiodiversityMetrics::Absent,
                 &Symbol::new(&env, "blue_carbon"),
                 &make_ipfs_hash(&env, 7),
                 &0,
